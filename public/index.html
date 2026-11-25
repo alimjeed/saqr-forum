@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>الصقر المغوار</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+.posts-area {
+  max-width: 700px;
+  margin: 25px auto;
+  padding: 15px;
+}
+.post-box, .post {
+  background: #1e293b;
+  color: white;
+  padding: 18px;
+  margin-bottom: 18px;
+  border-radius: 14px;
+}
+.post-box input, .post-box textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 13px;
+  margin: 10px 0;
+  border: 0;
+  border-radius: 9px;
+  font-size: 16px;
+}
+.post-box textarea {
+  min-height: 120px;
+}
+.post-box button {
+  width: 100%;
+  padding: 14px;
+  background: #d69e24;
+  border: 0;
+  border-radius: 9px;
+  font-size: 17px;
+  cursor: pointer;
+}
+.post small {
+  color: #f5c542;
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+<h1>🦅 الصقر المغوار</h1>
+<p>منتدى المعرفة والأصدقاء</p>
+</header>
+
+<main class="welcome">
+
+<div id="guest">
+<h2>أهلاً بك في منتدى الصقر المغوار 🦅</h2>
+<p>سجل الدخول أو أنشئ حساباً حتى تشاركنا المواضيع.</p>
+
+<div class="posts-area">
+<section class="post-box">
+<h2>تسجيل الدخول</h2>
+<form id="loginForm">
+<input name="username" placeholder="اسم المستخدم" required>
+<input name="password" type="password" placeholder="كلمة المرور" required>
+<button type="submit">دخول</button>
+</form>
+
+<h2>إنشاء حساب جديد</h2>
+<form id="registerForm">
+<input name="username" placeholder="اسم المستخدم" required>
+<input name="password" type="password" placeholder="كلمة المرور - 8 أحرف على الأقل" required>
+<button type="submit">إنشاء الحساب</button>
+</form>
+<p id="authMessage"></p>
+</section>
+</div>
+</div>
+
+<div id="member" hidden>
+<h2>أهلاً بك يا <span id="memberName"></span> 🦅</h2>
+
+<button id="notificationsButton" type="button">🔔 إشعاراتي</button>
+<div id="notifications" hidden style="background:#1e293b;color:white;padding:15px;margin:15px auto;border-radius:12px;max-width:700px">
+  <h3>🔔 الإشعارات</h3>
+  <div id="notificationsList">جاري تحميل الإشعارات...</div>
+</div>
+
+
+
+<div class="posts-area">
+<section class="post-box">
+<h2>✍️ اكتب موضوعاً جديداً</h2>
+<form id="postForm">
+<input name="title" placeholder="عنوان الموضوع" maxlength="120" required>
+<textarea name="content" placeholder="اكتب مشاركتك هنا..." maxlength="10000" required></textarea>
+<input type="file" name="image" accept="image/jpeg,image/png,image/gif,image/webp">
+
+<button type="submit">نشر الموضوع</button>
+</form>
+<p id="message"></p>
+</section>
+
+<h2>📚 مواضيع الأعضاء</h2>
+<div id="posts">جاري تحميل المواضيع...</div>
+</div>
+
+<button class="btn login" id="logout">تسجيل الخروج</button>
+</div>
+
+</main>
+
+<script>
+document.getElementById('authMessage').textContent = 'اختبار: JavaScript يعمل';
+const message = document.getElementById('message');
+
+async function loadNotifications() {
+  const list = document.getElementById('notificationsList');
+
+  try {
+    const response = await fetch('/api/notifications');
+    const notifications = await response.json();
+
+    if (!response.ok) {
+      list.textContent = notifications.message || 'تعذر تحميل الإشعارات';
+      return;
+    }
+
+    list.replaceChildren();
+
+    if (notifications.length === 0) {
+      list.textContent = 'لا توجد إشعارات حالياً 🔕';
+      return;
+    }
+
+    notifications.forEach(item => {
+      const box = document.createElement('p');
+      box.style.padding = '10px';
+      box.style.borderBottom = '1px solid #475569';
+      box.textContent = item.type === 'like'
+        ? '❤️ أعجب ' + item.actor + ' بموضوعك'
+        : '💬 علّق ' + item.actor + ' على موضوعك';
+      list.appendChild(box);
+    });
+  } catch (error) {
+    list.textContent = 'تعذر الاتصال بالسيرفر';
+  }
+}
+
+document.getElementById('notificationsButton').addEventListener('click', async () => {
+  const panel = document.getElementById('notifications');
+  panel.hidden = !panel.hidden;
+
+  if (!panel.hidden) {
+    await loadNotifications();
+  }
+});
+
+async function checkLogin() {
+  try {
+    const response = await fetch('/api/me');
+    const data = await response.json();
+
+    document.getElementById('guest').hidden = !!data.username;
+    document.getElementById('member').hidden = !data.username;
+
+    if (data.username) {
+      document.getElementById('memberName').textContent = data.username;
+      loadPosts();
+    }
+  } catch {
+    message.textContent = 'تعذر الاتصال بالسيرفر';
+  }
+}
+
+function renderComments(post, box) {
+  const section = document.createElement('section');
+  const heading = document.createElement('h4');
+  heading.textContent = '💬 التعليقات';
+  section.appendChild(heading);
+
+  const comments = Array.isArray(post.comments) ? post.comments : [];
+
+  comments.forEach(comment => {
+    const item = document.createElement('p');
+    const author = document.createElement('strong');
+    author.textContent = comment.username + ': ';
+    item.append(author, document.createTextNode(comment.content));
+    const date = document.createElement('small');
+    date.textContent = ' — ' + new Date(comment.date).toLocaleString('ar-IQ');
+    item.appendChild(date);
+    section.appendChild(item);
+  });
+
+  const form = document.createElement('form');
+  const input = document.createElement('input');
+  input.name = 'content';
+  input.placeholder = 'اكتب تعليقك هنا...';
+  input.maxLength = 2000;
+  input.required = true;
+  input.style.cssText = 'width:100%;box-sizing:border-box;padding:12px;margin:8px 0;border-radius:8px';
+
+  const button = document.createElement('button');
+  button.type = 'submit';
+  button.textContent = 'إرسال التعليق';
+  button.style.cssText = 'padding:10px 18px;border:0;border-radius:8px;cursor:pointer';
+
+  const result = document.createElement('p');
+  form.append(input, button, result);
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    button.disabled = true;
+    result.textContent = 'جاري إرسال التعليق...';
+
+    try {
+      const response = await fetch('/api/posts/' + encodeURIComponent(post.id) + '/comments', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({content: input.value})
+      });
+      const data = await response.json();
+      result.textContent = data.message;
+      if (response.ok) await loadPosts();
+    } catch {
+      result.textContent = 'تعذر الاتصال بالسيرفر';
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  section.appendChild(form);
+  box.appendChild(section);
+}
+
+async function loadPosts() {
+  const area = document.getElementById('posts');
+  try {
+    const response = await fetch('/api/posts');
+    const posts = await response.json();
+
+    area.replaceChildren();
+
+    if (!posts.length) {
+      area.textContent = 'لا توجد مواضيع حتى الآن. كن أول من ينشر!';
+      return;
+    }
+
+    posts.forEach(post => {
+      const box = document.createElement('article');
+      box.className = 'post';
+
+      const title = document.createElement('h3');
+      title.textContent = post.title;
+
+      const content = document.createElement('p');
+      content.textContent = post.content;
+
+      if (post.image) {
+        const image = document.createElement('img');
+        image.src = post.image;
+        image.alt = 'صورة الموضوع';
+        image.style.maxWidth = '100%';
+        image.style.borderRadius = '12px';
+        image.style.marginTop = '10px';
+        box.appendChild(image);
+      }
+
+      const author = document.createElement('small');
+      author.textContent = 'بواسطة: ' + post.username;
+
+      const date = document.createElement('p');
+      date.textContent = new Date(post.date).toLocaleString('ar-IQ');
+
+      if (!Array.isArray(post.likes)) post.likes = [];
+
+      const likeButton = document.createElement('button');
+      likeButton.textContent = '❤️ إعجاب (' + post.likes.length + ')';
+      likeButton.addEventListener('click', async () => {
+        const response = await fetch('/api/posts/' + encodeURIComponent(post.id) + '/like', {
+          method: 'POST'
+        });
+        const result = await response.json();
+        if (response.ok) {
+          await loadPosts();
+        } else {
+          alert(result.message);
+        }
+      });
+
+      box.append(title, content, author, date, likeButton);
+      renderComments(post, box);
+      area.appendChild(box);
+    });
+  } catch {
+    area.textContent = 'تعذر تحميل المواضيع';
+  }
+}
+
+document.getElementById('postForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const form = e.target;
+  const data = new FormData(form);
+
+  message.textContent = 'جاري النشر...';
+
+  try {
+    const response = await fetch('/api/posts', {
+      method: 'POST',
+      body: data
+    });
+
+    const result = await response.json();
+    message.textContent = result.message;
+
+    if (response.ok) {
+      form.reset();
+      await loadPosts();
+    }
+  } catch {
+    message.textContent = 'تعذر الاتصال بالسيرفر';
+  }
+});
+
+document.getElementById('logout').addEventListener('click', async () => {
+  await fetch('/api/logout', {method: 'POST'});
+  location.reload();
+});
+
+
+async function authSubmit(form, endpoint) {
+  const data = Object.fromEntries(new FormData(form));
+  const msg = document.getElementById('authMessage');
+  msg.textContent = 'جاري الاتصال...';
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    });
+    const result = await response.json();
+    msg.textContent = result.message;
+    if (response.ok) checkLogin();
+  } catch {
+    msg.textContent = 'تعذر الاتصال بالسيرفر';
+  }
+}
+
+document.getElementById('loginForm').addEventListener('submit', e => {
+  e.preventDefault();
+  document.getElementById('authMessage').textContent = 'زر الدخول يعمل!';
+  authSubmit(e.target, '/api/login');
+});
+
+document.getElementById('registerForm').addEventListener('submit', e => {
+  e.preventDefault();
+  authSubmit(e.target, '/api/register');
+});
+
+checkLogin();
+</script>
+
+</body>
+</html>

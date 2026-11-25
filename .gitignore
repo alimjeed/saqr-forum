@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+users.json
+posts.json
+notifications.json
+
+*.backup
+*.before-comments
+*.test-backup
