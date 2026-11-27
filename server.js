@@ -189,16 +189,7 @@ app.get('/api/posts', async (req, res) => {
   }
 });
 
-const uploadsDir = path.join(__dirname, 'public', 'uploads');
-fs.mkdirSync(uploadsDir, {recursive:true});
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, crypto.randomUUID() + ext);
-  }
-});
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
@@ -213,6 +204,8 @@ const upload = multer({
 });
 
 app.post('/api/posts', upload.single('image'), async (req, res) => {
+  let uploadedPath = null;
+
   try {
     if (!req.session.username) {
       return res.status(401).json({message:'سجل الدخول أولاً'});
@@ -226,9 +219,35 @@ app.post('/api/posts', upload.single('image'), async (req, res) => {
     }
 
     const profile = await getProfile(req.session.username);
-    const image = req.file ? '/uploads/' + req.file.filename : null;
+    let image = null;
 
-    const { error } = await supabase.from('posts').insert({
+    if (req.file) {
+      const extensions = {
+        'image/jpeg': '.jpg',
+        'image/png': '.png',
+        'image/gif': '.gif',
+        'image/webp': '.webp'
+      };
+
+      uploadedPath = crypto.randomUUID() + extensions[req.file.mimetype];
+
+      const {error: uploadError} = await supabase.storage
+        .from('forum-images')
+        .upload(uploadedPath, req.file.buffer, {
+          contentType: req.file.mimetype,
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      const {data: publicData} = supabase.storage
+        .from('forum-images')
+        .getPublicUrl(uploadedPath);
+
+      image = publicData.publicUrl;
+    }
+
+    const {error} = await supabase.from('posts').insert({
       user_id: profile.id,
       title,
       content,
@@ -239,6 +258,10 @@ app.post('/api/posts', upload.single('image'), async (req, res) => {
 
     res.json({message:'تم نشر الموضوع بنجاح'});
   } catch (error) {
+    if (uploadedPath) {
+      await supabase.storage.from('forum-images').remove([uploadedPath]);
+    }
+
     console.error('Create post error:', error.message);
     res.status(500).json({message:'تعذر نشر الموضوع'});
   }
