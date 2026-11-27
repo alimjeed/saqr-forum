@@ -3,6 +3,8 @@ require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
 const session = require('express-session');
+const { Pool } = require('pg');
+const PgSession = require('connect-pg-simple')(session);
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -15,11 +17,23 @@ const supabase = createClient(
   process.env.SUPABASE_SECRET_KEY
 );
 
+const pgPool = new Pool({
+  connectionString: process.env.DATABASE_URL.split('?')[0],
+  ssl: {
+    ca: fs.readFileSync(path.join(__dirname, 'supabase-ca.crt'), 'utf8')
+  }
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
+  store: new PgSession({
+    pool: pgPool,
+    tableName: 'sessions',
+    createTableIfMissing: false
+  }),
   secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
   resave: false,
   saveUninitialized: false,
