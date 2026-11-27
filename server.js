@@ -18,7 +18,7 @@ const supabase = createClient(
 );
 
 const pgPool = new Pool({
-  connectionString: process.env.DATABASE_URL.split('?')[0],
+  connectionString: process.env.SUPABASE_DATABASE_URL.split('?')[0],
   ssl: {
     ca: fs.readFileSync(path.join(__dirname, 'supabase-ca.crt'), 'utf8')
   }
